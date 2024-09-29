@@ -38,12 +38,18 @@ class UserController {
         }
     }
 
-    public function getUser($id) {
+    public function getUser($userId = null) {
         try {
-            Validator::validate($id, [
+            // If $userId is not provided as a path parameter, check for query parameter
+            if ($userId === null) {
+                $userId = $_GET['userId'] ?? null;
+            }
+
+            Validator::validate(['userId' => $userId], [
                 'userId' => 'required|string',
             ]);
-            $user = $this->userModel->getUser($id['userId']);
+
+            $user = $this->userModel->getUser($userId);
             
             if ($user) {
                 successResponse($user, 200);

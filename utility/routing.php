@@ -1,44 +1,73 @@
 <?php
-function isGet(): bool
+
+declare(strict_types=1);
+
+class Router
 {
-    return $_SERVER['REQUEST_METHOD'] === 'GET';
-}
+    private array $routes = [];
 
-function isPost(): bool
-{
-    return $_SERVER['REQUEST_METHOD'] === 'POST';
-}
-
-function isPut(): bool
-{
-    return $_SERVER['REQUEST_METHOD'] === 'PUT';
-}
-
-function isDelete(): bool
-{
-    return $_SERVER['REQUEST_METHOD'] === 'DELETE';
-}
-
-
-function route(string $path, callable $callback): void
-{
-    $requestPath = explode('/', trim($_SERVER['PATH_INFO'] ?? '', '/'));
-    $routePath = explode('/', trim($path, '/'));
-
-    if (count($requestPath) !== count($routePath)) {
-        return;
+    public function addRoute(string $method, string $path, string $handler): void
+    {
+        $this->routes[$method][$path] = $handler;
     }
 
-    $params = [];
-    for ($i = 0; $i < count($routePath); $i++) {
-        if ($routePath[$i] !== $requestPath[$i] && $routePath[$i] !== '?') {
+    public function get(string $path, string $handler): void
+    {
+        $this->addRoute('GET', $path, $handler);
+    }
+
+    public function post(string $path, string $handler): void
+    {
+        $this->addRoute('POST', $path, $handler);
+    }
+
+    public function put(string $path, string $handler): void
+    {
+        $this->addRoute('PUT', $path, $handler);
+    }
+
+    public function delete(string $path, string $handler): void
+    {
+        $this->addRoute('DELETE', $path, $handler);
+    }
+
+    public function handleRequest(): void
+    {
+        $method = $_SERVER['REQUEST_METHOD'];
+        $requestUri = $_SERVER['REQUEST_URI'];
+        $path = parse_url($requestUri, PHP_URL_PATH);
+        $path = trim($path, '/');
+
+        // Check for exact match first
+        if (isset($this->routes[$method][$path])) {
+            $this->executeHandler($this->routes[$method][$path]);
             return;
         }
-        if ($routePath[$i] === '?') {
-            $params[] = $requestPath[$i];
+
+        // Check for routes with parameters
+        foreach ($this->routes[$method] as $routePath => $handler) {
+            $pattern = $this->convertRouteToRegex($routePath);
+            if (preg_match($pattern, $path, $matches)) {
+                array_shift($matches); // Remove the full match
+                $this->executeHandler($handler, $matches);
+                return;
+            }
         }
+
+        // No route found
+        http_response_code(404);
+        echo "404 Not Found";
     }
 
-    $callback(...$params);
-    exit;
+    private function convertRouteToRegex(string $route): string
+    {
+        return '#^' . preg_replace('/\{([a-zA-Z0-9_]+)\}/', '([^/]+)', $route) . '$#';
+    }
+
+    private function executeHandler(string $handler, array $params = []): void
+    {
+        [$controller, $action] = explode('@', $handler);
+        $controllerInstance = new $controller();
+        $controllerInstance->$action(...$params);
+    }
 }

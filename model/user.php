@@ -1,28 +1,51 @@
 <?php
-require 'utility/connection/base.php';
 
+declare(strict_types=1);
 
-class User extends BaseModel {
+require_once 'utility/QueryBuilder.php';
+require_once 'utility/connection/base.php';
 
-    public function createUser($u_id, $email, $user_tag, $password, $isSocial) {
-        $stmt = $this->db->prepare("INSERT INTO User (u_id, email, user_tag, password, isSocial) VALUES (?, ?, ?, ?, ?)");
-        $stmt->execute([$u_id, $email, $user_tag, password_hash($password, PASSWORD_BCRYPT), $isSocial]);
-        return $this->db->lastInsertId();
+class User extends BaseModel
+{
+    private PDO $db;
+ 
+    public function createUser(string $userId, string $email, string $userTag, string $password, bool $isSocial): string
+    {
+        return Query::table('users')
+            ->insert([
+                'u_id' => $userId,
+                'email' => $email,
+                'user_tag' => $userTag,
+                'password' => password_hash($password, PASSWORD_DEFAULT),
+                'is_social' => $isSocial
+            ])
+            ->execute();
     }
 
-    public function getUser($id) {
-        $stmt = $this->db->prepare("SELECT * FROM User WHERE id = ?");
-        $stmt->execute([$id]);
-        return $stmt->fetch(PDO::FETCH_ASSOC);
+    public function getUser(string $userId): ?array
+    {
+        $stmt = $this->db->prepare("SELECT * FROM users WHERE u_id = ?");
+        $stmt->execute([$userId]);
+        return $stmt->fetch() ?: null;
     }
 
-    public function updateUser($id, $email, $user_tag, $password) {
-        $stmt = $this->db->prepare("UPDATE User SET email = ?, user_tag = ?, password = ? WHERE id = ?");
-        return $stmt->execute([$email, $user_tag, password_hash($password, PASSWORD_BCRYPT), $id]);
+    public function updateUser(string $id, string $email, string $userTag, string $password): bool
+    {
+        return (bool) Query::table('users')
+            ->update([
+                'email' => $email,
+                'user_tag' => $userTag,
+                'password' => password_hash($password, PASSWORD_DEFAULT)
+            ])
+            ->where('u_id', $id)
+            ->execute();
     }
 
-    public function deleteUser($id) {
-        $stmt = $this->db->prepare("DELETE FROM User WHERE id = ?");
-        return $stmt->execute([$id]);
+    public function deleteUser(string $id): bool
+    {
+        return (bool) Query::table('users')
+            ->delete()
+            ->where('u_id', $id)
+            ->execute();
     }
 }

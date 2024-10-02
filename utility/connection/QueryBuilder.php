@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-require_once 'dbase.php';
+require_once 'base.php';
 
-class Query
+class Query extends BaseModel
 {
     private string $table;
     private string $operation;
@@ -18,6 +18,7 @@ class Query
     private array $orderBy = [];
     private array $groupBy = [];
     private array $having = [];
+    private bool $debug = false;
 
     public function __construct()
     {
@@ -118,11 +119,22 @@ class Query
         return $this;
     }
 
+    public function debug(bool $enable = true): self
+    {
+        $this->debug = $enable;
+        return $this;
+    }
+
     public function execute()
     {
         $query = $this->buildQuery();
-        $stmt = $this->pdo->prepare($query);
         $params = $this->getParams();
+
+        if ($this->debug) {
+            echo "Debug - SQL Query: " . $this->interpolateQuery($query, $params) . "\n";
+        }
+
+        $stmt = $this->pdo->prepare($query);
         $stmt->execute($params);
 
         switch ($this->operation) {
@@ -182,7 +194,10 @@ class Query
 
     private function buildSelectQuery(): string
     {
-        $columns = implode(', ', array_map([$this, 'quoteIdentifier'], $this->columns));
+        $columns = $this->columns[0] === '*' 
+            ? '*' 
+            : implode(', ', array_map([$this, 'quoteIdentifier'], $this->columns));
+        
         $query = "SELECT {$columns} FROM " . $this->quoteIdentifier($this->table);
         
         // Add JOIN clauses
@@ -192,7 +207,9 @@ class Query
         }
         
         $where = $this->buildWhereClause();
-        $query .= $where;
+        if (!empty($where)) {
+            $query .= " " . $where;
+        }
         
         if (!empty($this->groupBy)) {
             $query .= " GROUP BY " . implode(', ', array_map([$this, 'quoteIdentifier'], $this->groupBy));
@@ -233,7 +250,8 @@ class Query
 
     private function quoteIdentifier(string $identifier): string
     {
-        return '`' . str_replace('`', '``', $identifier) . '`';
+        // Remove backticks and return the identifier as-is
+        return str_replace('`', '', $identifier);
     }
 
     private function getParams(): array
@@ -244,5 +262,36 @@ class Query
             $params[] = $condition[2];
         }
         return $params;
+    }
+
+    private function interpolateQuery(string $query, array $params): string
+    {
+        $keys = array();
+        $values = $params;
+
+        // build a regular expression for each parameter
+        foreach ($params as $key => $value) {
+            if (is_string($key)) {
+                $keys[] = '/:' . $key . '/';
+            } else {
+                $keys[] = '/[?]/';
+            }
+
+            if (is_array($value)) {
+                $values[$key] = "'" . implode("','", array_map([$this->pdo, 'quote'], $value)) . "'";
+            } elseif (is_null($value)) {
+                $values[$key] = 'NULL';
+            } elseif (is_string($value)) {
+                $values[$key] = $this->pdo->quote($value);
+            } elseif (is_bool($value)) {
+                $values[$key] = $value ? '1' : '0';
+            } else {
+                $values[$key] = $value;
+            }
+        }
+
+        $query = preg_replace($keys, $values, $query, 1, $count);
+
+        return $query;
     }
 }

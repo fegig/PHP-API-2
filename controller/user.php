@@ -23,7 +23,7 @@ class UserController {
                 'password' => 'required|string',
                 'isSocial' => 'required|boolean',
             ]);
-            
+           
             $result = $this->userModel->createUser(
                 $data['userId'],
                 $data['email'],
